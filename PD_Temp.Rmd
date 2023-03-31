@@ -1,0 +1,364 @@
+---
+title: "PD_Temp"
+author: "Marina R."
+date: "07 04 2021"
+output: html_document
+---
+
+#change Working-Directory
+setwd("~/PD-Temp")
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+#list packages
+pags<-list("openxlsx","ggplot2","ggpubr","clinfun", "reshape", "ez", "ggExtra")
+# packages for: loading xlsx files,
+#                       graphics,
+#                       stats in ggplot,
+#                       trend tests,
+#                       long/wide transform, 
+#                       mixed ANOVA, 
+#                       marginal histogram
+
+#load packages
+lapply(pags, require, character.only=TRUE)
+
+#################################################################################################
+
+#load excel file
+PDTemp<-read.xlsx(xlsxFile = "PD-Zeit-Daten_sign.xlsx",  rows=1:31, sheet = "Tabelle1",
+                   colNames = TRUE)
+
+#transform variable "Zuordnung" into factor (required for Boxplot, formula t-test etc.)
+PDTemp$Zuordnung<-factor(PDTemp$Zuordnung, levels=c(0,1), labels=c("HC", "PD"))
+
+#restrict data set to non-drop-outs 
+PDTemp_Incl<-subset(PDTemp,`BDI-II`<28)
+
+```
+
+
+```{r}
+#Analysis MI-Task
+
+#calculate new variable as relative deviation to 10 s 
+PDTemp_Incl$MI_prozentuale_Abw<-(PDTemp_Incl$Mittelwert.Differenz.MI.absolut/10)*100
+
+#create grouped boxplot R base
+boxplot(MI_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl,
+        xlab="Diagnose", ylab="MI Performance Differenz [%]", main="Performance MI-Aufgabe", labels="Gesunder Kontrollproband", "Parkinson Patient")
+
+#test normal distribution of this variable in both groups
+shapiro.test(subset(PDTemp_Incl, Zuordnung=="PD")$MI_prozentuale_Abw )#nv
+
+shapiro.test(subset(PDTemp_Incl, Zuordnung=="HC")$MI_prozentuale_Abw )#nv
+```
+
+
+```{r}
+#test for variance homogeneity
+bartlett.test(MI_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl)
+
+#compare MI performance between groups with two-sample t-test
+t.test(MI_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl, var.equal=TRUE)
+
+#calculate sd in both groups
+aggregate(MI_prozentuale_Abw ~ Zuordnung, data= PDTemp_Incl, FUN=sd)
+
+```
+
+```{r}
+#create ggplot boxplot with individual data points and stats
+compare_means(MI_prozentuale_Abw ~ Zuordnung, data = PDTemp_Incl, method="t.test", var.equal=TRUE)
+
+p<-ggplot(data=PDTemp_Incl, mapping=aes(x=Zuordnung, y=MI_prozentuale_Abw, fill=Zuordnung))+
+ scale_fill_brewer(palette="Dark2") +
+  geom_boxplot( alpha=0.3,width=0.5, size=1,outlier.shape = NA)+
+  theme_classic()+
+  labs(title="Motor Imagery Task",x="", y = "Deviation [%]")+
+  theme(legend.position="none")+
+  geom_jitter(size=4, shape=21, width=0.2)+
+  theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=25, face="bold", vjust=0.3),
+        plot.title = element_text(size=30, face="bold", hjust=0.5))+
+  scale_y_continuous(breaks = c(10,20,30,40,50))
+
+p+ stat_compare_means(method="t.test",method.args = list(var.equal=TRUE), label="p.signif", label.x=1.5, label.y=40, size=15)+
+  stat_compare_means(method="t.test", method.args = list(var.equal=TRUE), label.y=50, label.x=0.7, size= 7)
+
+#ggsave(filename="MI_Boxplot_pval.png", dpi=300)
+
+```
+
+
+```{r}
+#Analysis control task
+PDTemp_Incl$Kontrolle_prozentuale_Abw<-(PDTemp_Incl$Mittelwert.Differenz.Kontrolle.absolut/10)*100
+
+#create grouped boxplot R base
+boxplot(Kontrolle_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl)
+
+#test normal distribution of this variable in both groups
+shapiro.test(subset(PDTemp_Incl, Zuordnung=="PD")$Kontrolle_prozentuale_Abw)# not nv
+
+shapiro.test(subset(PDTemp_Incl, Zuordnung=="HC")$Kontrolle_prozentuale_Abw)# not nv
+
+#Mean
+aggregate(Kontrolle_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl, FUN=mean)
+
+#sd
+aggregate(Kontrolle_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl, FUN=sd)
+
+```
+
+```{r}
+#compare control task performance between groups with Wilcoxon (Mann-Whitney-U)
+wilcox.test(Kontrolle_prozentuale_Abw ~ Zuordnung, data=PDTemp_Incl, exact=FALSE, conf.int= TRUE)
+```
+
+
+```{r}
+#create ggplot boxplot with individual data points and stats
+compare_means(Kontrolle_prozentuale_Abw ~ Zuordnung, data = PDTemp_Incl, method="wilcox.test")
+
+p<-ggplot(data=PDTemp_Incl, mapping=aes(x=Zuordnung, y=Kontrolle_prozentuale_Abw, fill=Zuordnung))+
+  scale_fill_brewer(palette="Dark2") +
+  geom_boxplot( alpha=0.3,width=0.5, size=1,outlier.shape = NA)+
+  theme_classic()+
+  labs(title="Auditory Control Task",x="", y = "Deviation [%]")+
+  theme(legend.position="none")+
+  geom_jitter(size=4, shape=21, width=0.2)+
+  theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=25, face="bold", vjust=0.3),
+        plot.title = element_text(size=30, face="bold", hjust=0.5))+
+  scale_y_continuous(breaks = c(10,20,30,40,50))
+
+p+ stat_compare_means(method="wilcox.test",label="p.signif", label.x=1.5, label.y=20, size=15)+
+  stat_compare_means(method="wilcox.test", label.y=40, label.x=0.7, size= 7)
+
+#ggsave(filename="Control_Boxplot_pval.png", dpi=300)
+
+```
+
+```{r}
+# compare MI- and control performance on individual level:
+
+#subset with relevant variables
+data_wide_All <- subset(PDTemp_Incl, select = c(Subject, Zuordnung, MI_prozentuale_Abw, Kontrolle_prozentuale_Abw))
+
+#transform wide to long 
+data_long_All <- melt(data_wide_All, id = c("Subject","Zuordnung"), measured = c( "MI_prozentuale_Abw", "Kontrolle_prozentuale_Abw"))
+
+names(data_long_All)<-c("Subject","Zuordnung", "Aufgabe", "Ergebnis")
+
+#ggplot with all subjects
+ggplot(data_long_All, aes(x=Aufgabe, y=Ergebnis, shape=Zuordnung, color=Zuordnung)) +
+  geom_point(size=4) +
+  scale_color_brewer(palette="Dark2")+ 
+  geom_line(aes(group=paste(Subject, Zuordnung))) + 
+  labs(x="", y = "Deviation [%]") + ylim(0,60) + theme_classic(base_size = 13) + 
+theme(legend.position="top",legend.title=element_blank())+
+    theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=25, face="bold", vjust=0.3),
+          legend.text = element_text(size=20))+
+    scale_x_discrete(labels = c('MI Task','Control Task'), expand=c(0.1,0.1))
+
+#ggsave(filename="MI_Control_Comp.png", dpi=300)
+```
+
+
+
+
+```{r}
+
+PDTemp_Incl$PDLRHC[PDTemp_Incl$Zuordnung=="PD"& PDTemp_Incl$Betonung=="links"]= "PD L" 
+PDTemp_Incl$PDLRHC[PDTemp_Incl$Zuordnung=="PD"& PDTemp_Incl$Betonung=="rechts"]= "PD R"
+PDTemp_Incl$PDLRHC[PDTemp_Incl$Zuordnung=="HC"]= "HC"
+
+PD<-subset(PDTemp_Incl,Zuordnung=="PD")
+
+#transform "Betonung" into factor
+PD$PDLRHC<-factor(PD$PDLRHC)
+
+#show boxplot for MI performance in PD group, grouped by side predominance
+boxplot(MI_prozentuale_Abw ~ PDLRHC, data=PD)
+
+#test for normal distribution in PD groups
+shapiro.test(subset(PD, Betonung=="links")$MI_prozentuale_Abw)#nv
+shapiro.test(subset(PD, Betonung=="rechts")$MI_prozentuale_Abw)#nv
+shapiro.test(subset(PDTemp_Incl, Zuordnung=="HC")$MI_prozentuale_Abw)#nv
+
+
+#how many with right/left PD?
+summary(PD$PDLRHC)
+
+#direct t-test between left and right
+t.test(MI_prozentuale_Abw ~ PDLRHC, data=PD)
+
+```
+
+```{r}
+#create ggplot boxplot for L/R groups with individual data points and stats
+
+#transform "Betonung" into factor
+PD$Betonung<-factor(PD$Betonung, levels=c("links","rechts"), labels=c("left", "right"))
+
+compare_means(MI_prozentuale_Abw ~ Betonung, data = PD, method="t.test", var.equal=TRUE)
+
+p<-ggplot(data=PD, mapping=aes(x=Betonung, y=MI_prozentuale_Abw, fill=Betonung))+
+ scale_fill_brewer(palette="Dark2") +
+  geom_boxplot( alpha=0.3,width=0.5, size=1,outlier.shape = NA)+
+  theme_classic()+
+  labs(title="Motor Imagery Task",x="", y = "Deviation [%]")+
+  theme(legend.position="none")+
+  geom_jitter(size=4, shape=21, width=0.2)+
+  theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=25, face="bold", vjust=0.3),
+        plot.title = element_text(size=30, face="bold", hjust=0.5))+
+  scale_y_continuous(breaks = c(10,20,30,40,50))
+
+p+stat_compare_means(method="t.test", method.args = list(var.equal=TRUE), label.y=50, label.x=0.7, size= 7)
+
+ggsave(filename="MI_PDRL_Comp.png", dpi=300)
+```
+
+
+
+```{r}
+#corr analysis with PANDA subitems
+PDTemp_sub<-read.xlsx(xlsxFile = "PDZeit.xlsx",  rows=1:31, sheet = "PDZeit",
+                   colNames = TRUE)
+
+
+PD<-subset(PDTemp_sub,Zuordnung=="PD"&`BDI-II`<28)
+
+PD$MI_prozentuale_Abw<-(PD$Mittelwert.Differenz.MI/10)*100
+
+PANDAsub<-cbind(PD$`PANDA-Arbeitsgedächtnis`,
+PD$`PANDA-Paarassoziationslernen`,
+PD$`PANDA-RäumlichesVorstellungsvermögen`,
+PD$`PANDA-VerzögerteAbfrage`,
+PD$`PANDA-Wortflüssigkeit`,
+PD$PANDA,
+PD$MI_prozentuale_Abw)
+
+colnames(PANDAsub)<-c("working_memory","associate_learning","spatial","delayed_recall","verbal_fluency","PANDA_total","MI_prozentuale_Abw")
+
+  coli <- ncol(PANDAsub)
+  comb <- matrix(nrow=coli,ncol=2)
+  comb[,1]<-1:7
+  comb[,2]<-7
+  ncomb <- nrow(comb)
+  
+   ResultMat <- matrix(nrow = coli, ncol = coli)
+
+  for (i in 1:ncomb) {
+   ResultMat[comb[i,1], comb[i,2]]<-cor.test(PANDAsub[,comb[i,1]], PANDAsub[,comb[i,2]], method="spearman", exact=FALSE)$p.value
+  ResultMat[comb[i,2],comb[i,1]]<-cor.test(PANDAsub[,comb[i,1]], PANDAsub[,comb[i,2]], method="spearman", exact=FALSE)$estimate
+  }
+  
+  colnames(ResultMat)<-colnames(PANDAsub)
+  rownames(ResultMat)<-colnames(PANDAsub)
+  
+  ResultMat
+
+```
+
+```{r}
+#Mixed anova
+#show patients in comparison to controls  worse performance (stronger misjudgement) in the MI task in comparison to the control task? 
+
+#reorganize data -> long format
+
+#subset with relevant variables
+data_wide_All <- subset(PDTemp_Incl, select = c(Subject, Zuordnung, MI_prozentuale_Abw, Kontrolle_prozentuale_Abw))
+
+# wide to long 
+data_long_All <- melt(data_wide_All, id = c("Subject","Zuordnung"), measured = c( "MI_prozentuale_Abw", "Kontrolle_prozentuale_Abw"))
+
+str(data_long_All$Subject)
+
+#tranform subject into factor var
+data_long_All$Subject<-factor(data_long_All$Subject)
+
+#rename columnes
+names(data_long_All)<-c("Subject","Zuordnung", "Aufgabe", "Ergebnis")
+
+#Sphericity
+#is given when only two possibilities are present 
+```
+
+
+
+```{r}
+#non-parametric from ez package
+
+ezPerm(data=data_long_All, dv=Ergebnis, wid=Subject, within = Aufgabe, between = Zuordnung)
+
+```
+
+
+
+
+
+```{r}
+#scatterplot MI vs FC
+
+#FC in num variables
+PDTemp_Incl$pPUTr_MI_Interaction<- as.numeric(PDTemp_Incl$pPUTr_MI_Interaction)
+PDTemp_Incl$aPUTr_MI_Interaction<- as.numeric(PDTemp_Incl$aPUTr_MI_Interaction)
+PDTemp_Incl$pCAUl_MI_Interaction<- as.numeric(PDTemp_Incl$pCAUl_MI_Interaction)
+
+#define variable MI +/- signed percentage
+PDTemp_Incl$Mittelwert.Differenz.MI.Vorzeichen.rel<-(PDTemp_Incl$Mittelwert.Differenz.MI.Vorzeichen/10)*100
+
+#plot scatterplot pCAu FC vs MI task with +/-
+g<-ggplot(PDTemp_Incl, aes(x=pCAUl_MI_Interaction, y=Mittelwert.Differenz.MI.Vorzeichen.rel, shape=Zuordnung, color= Zuordnung)) +
+ geom_point(size=3)+ geom_smooth(method="lm")+  theme_classic()+
+  labs(x="Functional Connectivity pCAUl - AGr", y = "MI Task Performance [%]") +xlim(c(-0.4, 0.4))+
+  scale_color_manual(values=c("springgreen3", "darkorange2"))+ theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=20, face="bold"), legend.text = element_text(size=20))+theme(legend.title=element_blank(),legend.text=element_text(size=25))              
+#add histogram per group on top
+ggMarginal(g, type = "histogram", groupColour = TRUE, groupFill = TRUE)
+
+#ggsave(filename="MI_pCAUl_histo.png",width = 8, height = 6, dpi=300)
+```
+
+```{r}
+#plot scatterplot pPUTr FC vs MI task with +/- 
+
+g<-ggplot(PDTemp_Incl, aes(x=pPUTr_MI_Interaction, y=Mittelwert.Differenz.MI.Vorzeichen.rel, shape=Zuordnung, color= Zuordnung)) +
+   geom_point(size=3)+ geom_smooth(method="lm")+  theme_classic()+
+  labs(x="Functional Connectivity pPUTr - PC", y = "MI Task Performance [%]") +
+  scale_color_manual(values=c("springgreen3", "darkorange2"))+ theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=20, face="bold"), legend.text = element_text(size=20))+theme(legend.title=element_blank(),legend.text=element_text(size=25))              
+#add histogramm per group
+ggMarginal(g, type = "histogram", groupColour = TRUE, groupFill = TRUE)
+
+#ggsave(filename="MI_pPUTr_histo.png",width = 8, height = 6, dpi=300)
+
+```
+
+
+```{r}
+#plot scatterplot  aPUTr FC vs. MI task with +/-
+
+g<-ggplot(PDTemp_Incl, aes(x=aPUTr_MI_Interaction, y=Mittelwert.Differenz.MI.Vorzeichen.rel, shape=Zuordnung, color= Zuordnung)) +
+  geom_point(size=3)+ geom_smooth(method="lm")+  theme_classic()+
+  labs(x="Functional Connectivity aPUTr - PreCGr", y = "MI Task Performance [%]") +
+   scale_color_manual(values=c("springgreen3", "darkorange2"))+ theme(axis.text = element_text(size=20, face="bold"),
+        axis.title = element_text(size=20, face="bold"), 
+        legend.text = element_text(size=20))+
+  theme(legend.title=element_blank(),legend.text=element_text(size=25))              
+
+
+#add histogram per group
+ggMarginal(g, type = "histogram", groupColour = TRUE, groupFill = TRUE)
+
+#ggsave(filename="MI_aPUTr_histo.png",width = 8, height = 6, dpi=300)
+```
+
+
+
+
